@@ -4,15 +4,14 @@
 
 <h1>DOCKERS</h1>
 
-This practice is intended to deploy a microservice that is able to read and write in a database. To implement this I built a dockerized flask application running in one container which points out toward the database running in another container.
+En esta práctica desplegaremos un microservicio capaz de interactuar con una BBDD MYSQL. Para ello dockerizaremos una aplicación Flask ubicada en un contenedor, la cual apuntará a las BBDD, ubicada en otro contenedor.
 
 ![flask app_v01](https://user-images.githubusercontent.com/39458920/158245730-c86f330d-4ed3-4795-ae9d-adb225c797a5.jpg)
 
-<b>Requirements:</b><br>
+<b>Requisitos:</b><br>
 <ul>
-<li> First of all install Docker engine for your OS as described <a href="https://docs.docker.com/engine/install/">here </a> </li>
-<li>You would need to install docker compose to run the application and database. You can find the steps <a href="https://docs.docker.com/compose/install/">over here</a> </li>
-<li>Python 3.7-alpine, Flask, MySQL 5.7, Docker and Docker Compose already installed</li>
+<li> Instalar el Docker engine siguiendo las instrucciones del <a href="https://docs.docker.com/engine/install/">enlace </a> </li>
+<li> Instalar - en caso de que no lo esté aun - docker compose siguiendo las instrucciones del <a href="https://docs.docker.com/compose/install/">enlace</a> </li>
 </lu>
 
 <h1>Docker compose installation</h1>
