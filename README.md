@@ -6,141 +6,59 @@
 
 En esta práctica desplegaremos un microservicio capaz de interactuar con una BBDD MYSQL. Para ello dockerizaremos una aplicación Flask ubicada en un contenedor, la cual apuntará a las BBDD, ubicada en otro contenedor.
 
-![flask app_v01](https://user-images.githubusercontent.com/39458920/158245730-c86f330d-4ed3-4795-ae9d-adb225c797a5.jpg)
-
 <b>Requisitos:</b><br>
 <ul>
 <li> Instalar el Docker engine siguiendo las instrucciones del <a href="https://docs.docker.com/engine/install/">enlace </a> </li>
 <li> Instalar - en caso de que no lo esté aun - docker compose siguiendo las instrucciones del <a href="https://docs.docker.com/compose/install/">enlace</a> </li>
 </lu>
 
-<h1>Docker compose installation</h1>
-Using the following command to install Docker compose. I am installing it under Linux OS.
+<h1>Flask-Counter-Mysql</h1>
+Descargar el contendido de la carpeta flask-counter-mysql del Repositorio en el directo local <b>"flask-counter-mysql"</b>. Estos ficheros permitirán desplegar la Aplicación/BBDD mediante docker compose.
 
-```bash
-sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-```
-Applying permissions to make the binary executable
-
-```bash
-sudo chmod +x /usr/local/bin/docker-compose
-```
-Finally you can verify the installation by this command:
-```bash
-docker-compose --version
-```
-It will deploy the following info:
-```bash
-docker-compose version 1.29.2, build 5becea4c
-```
-<h1>Flask MySQL App</h1>
-Now I am going to create a directory called <b>"flask-mysql-app"</b> to store there all files needed to dockerize it through docker compose.
-
-```bash
-mkdir flask-mysql-app
- ```
-First of all, I am going to define the app.py file to configure flask app and the database settings for establishing the communication between them.
-Also, there has been defined environment variables(hardcoded) for sensitive information such as, MYSQL_USER, MYSQL_PASSWORD, MYSQL_HOST and MYSQL_DB to make it configurable from only one file.
-```bash
-from flask import Flask
-from flask_mysqldb import MySQL
-import os
-
-app = Flask(__name__)
-
-app.config['MYSQL_USER'] = os.environ['MYSQL_USER']
-app.config['MYSQL_PASSWORD'] = os.environ['MYSQL_PASSWORD']
-app.config['MYSQL_HOST'] = os.environ['MYSQL_HOST']
-app.config['MYSQL_DB'] = os.environ['MYSQL_DB']
-mysql = MySQL(app)
-
-
-@app.route('/create-table')
-def createtable():
-    cursor = mysql.connection.cursor()
-    cursor.execute(''' CREATE TABLE students(id INT NOT NULL AUTO_INCREMENT,
-                                             name VARCHAR(50) NOT NULL,
-                                             email VARCHAR(100) NOT NULL,
-                                             phone INT NOT NULL,
-                                             address VARCHAR(250) NOT NULL, PRIMARY KEY (`id`)) ''')
-    cursor.close()
-    return 'Tabla Creada'
-
-
-@app.route('/add-students')
-def addstudents():
-    cursor = mysql.connection.cursor()
-    cursor.execute(''' INSERT INTO students (id,name,email,phone,address) VALUES(1,'Pedro Romero','pedro_romero@gmail.com',657798564,'Sant Joan DEspi');
-                       INSERT INTO students (id,name,email,phone,address) VALUES(2,'Nazaret Olivieri','nazaret_olivieri@gmail.com',610432987,'Cornella de Llobregat'); commit; ''')
-    cursor.close()
-    return 'Estudiantes añadidos del primer año'
-
-
-@app.route('/')
-def students():
-    s = "<table style='border:1px solid red'>"
-
-    cursor = mysql.connection.cursor()
-    cursor.execute(''' SELECT * FROM students; ''')
-    for row in cursor.fetchall():
-        s = s + "<tr>"
-        for x in row:
-            s = s + "<td>" + str(x) + "</td>"
-        s = s + "</tr>"
-
-    cursor.close()
-    return "<html><body>" + s + "</body></html>"
-    
-@app.route('/ping')
-def ping():
-    return 'pong
-```
-
-Now into the requirements file, I included the required libraries for app.py file
+En el fichero de requiremientos, encontraremos las librerías necesarias para desplegar el fichero app.py 
 ```bash
 flask
 flask-mysqldb
  ```
-For building the app, I have disegned a Dockerfile to add the required dependencies, software or libraries. Notice there were also included the environment variables for MySQL configuration, as it should be synchronized with the application.
+En el Dockerfile se añadirá el software y las librerías pertinentes. En el fichero .env encontraremos las variables que se aplicarán en los ficheros del despliegue.
 
-There was also introduced the variable <b>FLASK_ENV=development</b>, which reloads the application when it detects any change.
+<h1>Docker Multistage</h1>
 
-![dockerfile](https://user-images.githubusercontent.com/39458920/156876664-29752dc3-e913-4043-9713-5aa6b473b46e.JPG)
-
-<h1>Creating a Multistage  Docker build for Flask app</h1>
-
-I have adjusted the Dockerfile to make the image smaller.
+Llevado a cabo para reducir el tamaño del contenedor de la app
 
 ```bash
-FROM python:3.7-alpine
+FROM python:3.7-alpine as compile
+
+RUN apk add --no-cache gcc musl-dev linux-headers curl mysql-client mysql-dev 
 
 WORKDIR /app
+COPY . ./
 
-COPY requirements.txt requirements.txt
+RUN pip install --prefix=/install -r requirements.txt
 
-RUN apk add --no-cache gcc musl-dev linux-headers curl mysql-client mysql-dev
-RUN pip install -r requirements.txt
-
+FROM python:3.7-alpine as final
+RUN apk add --no-cache mysql-client mysql-dev 
+COPY --from=compile /install /usr/local
+WORKDIR /app
 COPY . ./
 
 ENV FLASK_APP=app.py
 ENV FLASK_ENV=development
 ENV FLASK_RUN_HOST=0.0.0.0
-ENV MYSQL_USER=usuariodb
-ENV MYSQL_PASSWORD=''
-ENV MYSQL_HOST=db
-ENV MYSQL_DB=studentdb
+ENV MYSQL_USER=keepcoding
+ENV MYSQL_PASSWORD=patodegoma
+ENV MYSQL_HOST=db01
+ENV MYSQL_DATABASE=contador-db
 
 EXPOSE 5000
 
 CMD flask run
 ```
 ```bash
-docker build -t flask-app .
+REPOSITORY                    TAG       IMAGE ID       CREATED          SIZE
+flask-counter-mysql-app       latest    3cdec075acaf   18 minutes ago   116MB
 
-docker image ls
-REPOSITORY                    TAG          IMAGE ID       CREATED          SIZE
-ramirezy/flask-app          latest       74a15c780d02   36 minutes ago     250MB
+
 ```
 Once built the flask image, I have uploaded it in my Docker hub repository to make it available to pull.
 
