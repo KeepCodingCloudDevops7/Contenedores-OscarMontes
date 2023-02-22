@@ -54,90 +54,36 @@ EXPOSE 5000
 
 CMD flask run
 ```
+Esta sería imagen resultante:
+
 ```bash
 REPOSITORY                    TAG       IMAGE ID       CREATED          SIZE
 flask-counter-mysql-app       latest    3cdec075acaf   18 minutes ago   116MB
 
 
 ```
-Once built the flask image, I have uploaded it in my Docker hub repository to make it available to pull.
+Tras construirla, la subi a mi repositorio de Docker Hub repository: oscarmontes/contenedores:flask-app
 
-<h1>Docker compose</h1>
+<h1>Docker Compose</h1>
 
-Now the final part is create the docker compose file, where are specified the services for flask and MySQL app, the container's image, the environments, ports, and volumenes to make it persistents for both database and flask app.
+Formado por dos servicios, una serie de variables definidas en el .env y los puertos y el forwarding.
 
-```bash
-version: '3.9'
-
-services:
-  app:
-    build: .
-    ports:
-     - 5000:5000
-    depends_on:
-      - db
-    volumes:
-      - ./app.py:/app/app.py
-  db:
-    image: mysql:5.7
-    command: --default-authentication-plugin=mysql_native_password
-    restart: always
-    environment:
-     MYSQL_ROOT_PASSWORD: "passw"
-     MYSQL_DATABASE: "studentdb"
-     MYSQL_USER: "usuariodb"
-     MYSQL_PASSWORD: ""
-    ports:
-     - 3306:3306
-    expose:
-     - 3306
-    volumes:
-     - /my-db:/var/lib/mysql
-
-volumes:
- my-db:
- ```
-
-Once deployed the dockerfile, docker compose, and any other the files required, now you can run the application through the command below:
+Para desplegar los contenedores, ejecutar:
  
  ```bash
  docker-compose up
  ```
- The output should be as follows:
+Ejecutando curl http://192.168.49.1:5000 repetidas veces, veremos que el contador aumenta.
  
- ![docker](https://user-images.githubusercontent.com/39458920/156846760-316557b8-bc69-42d7-88f7-8fbabd14b19b.JPG)
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>1</td></tr></body></html>
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>2</td></tr></body></html>
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>3</td></tr></body></html>
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>4</td></tr></body></html>
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>5</td></tr></body></html>
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>6</td></tr></body></html>
+
  
- Now you can see the output by typing the url shown above http://172.18.0.3:5000/ on your Unix shell terminal or your browser.
- To see the output of table creation, type the command:  
  
- ```bash
- http://172.18.0.3:5000/create-table
- ```
- You will see the following output on your Unix terminal/browser:
-
-![create-table](https://user-images.githubusercontent.com/39458920/156878380-cd7e6253-e47e-4aab-9ec5-eb188baa699a.JPG)
-
-To see the output of added students, type the command:  
- ```bash
- http://172.18.0.3:5000/add-students
- ```
-You will see the following output on your Unix terminal/browser:
-
-![add-students](https://user-images.githubusercontent.com/39458920/156878176-3f0cb950-f870-4c59-ba98-1577547bed4b.JPG)
- 
- To see the output of table students, type the command: 
-  ```bash
- http://172.18.0.3:5000/
- ```
- You will see the following output on your Unix terminal/browser:
- ![output_db](https://user-images.githubusercontent.com/39458920/157477439-3835c41a-8769-4a76-9d30-eead3e4323c6.JPG)
-  
-<h1>Verifying the logs for database and flask app are being sent to standard output (STDOUT/STDERR)</h1>
-
-![mysql_logs](https://user-images.githubusercontent.com/39458920/156889548-cbc012dc-a797-4328-9157-92150338a255.JPG)
-
-![flask_logs](https://user-images.githubusercontent.com/39458920/156889585-cec4ba8d-a1c0-4183-ad89-50c0fbdcba48.JPG)
-
 <h1>Deploying the application in Kubernetess</h1>
 First of all you will need to create a cluster in Google Cloud console to associate it to Kubernetes environment.
 
