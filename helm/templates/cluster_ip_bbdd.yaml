@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "flaskapp.fullname" . }}-db
+  namespace: {{ .Release.Namespace }}
+spec:
+  ports:
+  - port: {{ .Values.service.port }}
+  selector:
+    {{- include "flaskapp.selectorLabels" . | nindent 4 }}
+    layer: db
+  clusterIP: None
