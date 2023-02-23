@@ -1,0 +1,27 @@
+version: '3.9'
+
+services:
+  app:
+    environment:
+      MYSQL_DATABASE: $MYSQL_DATABASE
+      MYSQL_USER: $MYSQL_USER
+      MYSQL_PASSWORD: $MYSQL_PASSWORD
+      MYSQL_HOST: "db01"
+    build: .
+    ports:
+     - 5000:5000
+    depends_on:
+      - db01
+  db01:
+    image: mysql
+    environment:
+     MYSQL_ROOT_PASSWORD: $MYSQL_ROOT_PASSWORD
+     MYSQL_DATABASE: $MYSQL_DATABASE
+     MYSQL_USER: $MYSQL_USER
+     MYSQL_PASSWORD: $MYSQL_PASSWORD
+    volumes:
+     - "./db.sh:/docker-entrypoint-initdb.d/db.sh"
+     - "mysql-data:/var/lib/mysql"
+
+volumes:
+ mysql-data:
