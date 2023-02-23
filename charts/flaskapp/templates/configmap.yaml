@@ -1,9 +1,0 @@
-apiVersion: v1
-data:
-  dbname: {{ .Values.dbname }}
-  host: {{ include "flaskapp.fullname" . }}-db
-kind: ConfigMap
-metadata:
-  creationTimestamp: null
-  name: {{ include "flaskapp.fullname" . }}-cm
-  namespace: {{ .Release.Namespace }}
