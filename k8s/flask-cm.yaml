@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+data:
+  MYSQL_USER: keepcoding
+  MYSQL_HOST: bbdd1
+  MYSQL_DATABASE: contador-db
+  FLASK_APP: app.py
+  FLASK_ENV: development
+  FLASK_RUN_HOST: 0.0.0.0
+metadata:
+  name: flask-config
+

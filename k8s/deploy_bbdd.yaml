@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-headless # tiene que hacer match con el statefulset 'serviceName'
+  labels:
+    app: app-mysql
+spec:
+  ports:
+  - port: 3306
+    name: web
+  clusterIP: None # para que sea headless
+  selector:
+    app: app-mysql # apunta a pods
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: app-mysql
+spec:
+  selector:
+    matchLabels:
+      app: app-mysql
+  serviceName: mysql-headless
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: app-mysql
+        type: database
+    spec:
+      containers:
+        - name: app
+          image: mysql
+          env:
+          - name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+               name: secret-manual
+               key: MYSQL_ROOT_PASSWORD
+          - name: MYSQL_DATABASE
+            valueFrom:
+              configMapKeyRef:
+               name: flask-config
+               key: MYSQL_DATABASE
+          - name: MYSQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: secret-manual
+                key: MYSQL_PASSWORD
+          - name: MYSQL_USER
+            valueFrom:
+              configMapKeyRef:
+               name: flask-config
+               key: MYSQL_USER     
+          ports:
+            - containerPort: 3306   
+          imagePullPolicy: Always
+          volumeMounts:
+          - name: mysql-persistent-storage
+            mountPath: /var/lib/mysql
+          - name: mysql-dbscripts
+            mountPath: /docker-entrypoint-initdb.d
+          args: ["--max-connections", "10000"]
+      volumes:
+        - name: mysql-dbscripts
+          configMap:
+            name: mysql-initdb-config                      
+  volumeClaimTemplates:
+  - metadata:
+      name: mysql-persistent-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "standard"
+      resources:
+        requests:
+          storage: 5Gi
+
+

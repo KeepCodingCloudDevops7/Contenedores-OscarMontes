@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+ name: bbdd1
+ labels:
+    app: app-mysql
+spec:
+ type: ClusterIP
+ selector:
+  app: app-mysql
+ ports:
+ - protocol: TCP
+   port: 3306
+   targetPort: 3306 
+   
