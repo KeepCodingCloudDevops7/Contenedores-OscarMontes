@@ -282,12 +282,55 @@ vagrant@tierra:/vagrant/practica-docker-k8s/k8s$ curl http://foo.bar.com
 
 <h1>Helm Charts</h1>
 
-En este apartado, obviaré la descripción de los ficheros y buena parte de los chequeos a realizar, ya que todo esto ya aparece en el apartado anterior.
+En este apartado, obviaré la descripción de los ficheros y los chequeos a realizar ya descritos en el apartado anterior.
+
+En el fichero de configuración, values.yaml, tendremos las variables (entre las que se encuentran las del autoescalado):
+
+```bash# Ingress
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: nginx
+  hosts:
+    - host: foo2.bar.com
+      paths:
+      - "/"
+# Secret
+db:
+  rootpassword: root1234
+  userpassword: patodegoma
+  username: keepcoding
+
+# Configmap
+dbname: contador-db
+host: mysql
+
+# Deployment
+replicaCount: 1
+image:
+  app: "oscarmontes/contenedores:flask-app"
+  db: "mysql"
+  pullPolicy: IfNotPresent
+
+# Service
+service:
+  type: Nodeport
+  app: 5000
+  port: 3306
+
+# Autoscalado
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 70
+```
+
 
 Desde el directorio helm, desplegamos del siguiente modo:
 
 ```bash
-elm install version1 flaskapp
+# helm install version1 flaskapp
 NAME: version1
 LAST DEPLOYED: Thu Feb 23 15:48:39 2023
 NAMESPACE: default
@@ -296,183 +339,55 @@ REVISION: 1
 TEST SUITE: None
 ```
 
-To build the Heml we are going to package these files:
-
-<ul>
-<li> configmap.yaml</li>
-<li>laskapp-deployment.yaml</li>
-<li>ingress.yaml </li>
-<li>mysql-deployment.yaml </li>
-<li>secret.yaml </li>
-<li> service-flask.yaml </li>
-<li> service-mysql.yaml </li>
-</lu>
-
-The main objects and helpers used to pass our files to metadata were as follows:
-
-<ul>
-<li> {{ include "flaskapp.fullname" . }}</li>
-<li>{{ .Release.Namespace }}</li>
-<li>{{- include "flaskapp.labels" . | nindent 4 }} --> To match the labels and selector labels </li>
-<li>{{ .Values.image.name }}</li>
-<li>{{- if .Values.ingress.enabled -}} --> To enable the ingress controller </li>
-</lu>
-
-
-Please have in mind while we are passing the templates in metada, we should be updating the values file to have it aligned and to make it configurable from a single file.
-
+Habiliamos las métricas para Minicube 
 ```bash
-# Ingress
-ingress:
-  enabled: true
-  annotations:
-    kubernetes.io/ingress.class: nginx
-  hosts:
-    - host: foo.bar.com
-      paths:
-      - "/"
-# Secret
-db:
-  rootpassword: passw
-  userpassword: secret12345
-  username: usuariodb
-
-# Configmap
-dbname: studentdb
-host: mysql
-
-# Deployment
-replicaCount: 1
-image:
-  app: "ramirezy/flask-app:latest"
-  db: "mysql:5.6"
-  pullPolicy: IfNotPresent
-
-# Service
-service:
-  type: "LoadBalancer"
-  app: 5000
-  port: 3306
-
-# Autoscaling
-autoscaling:
-  enabled: true
-  minReplicas: 1
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
+Minikube enable metrics-server addon
 ```
 
-Once we have all the files compiled we can test it with the following commands:
+Verificamos el correcto despliegue:
 
 ```bash
-helm template --debug flaskapp
+vagrant@tierra:/vagrant/helm/charts$ kubectl get all
+NAME                                         READY   STATUS    RESTARTS   AGE
+pod/version1-flaskapp-app-76b58b85f4-jtglr   1/1     Running   0          15m
+pod/version1-flaskapp-db-0                   1/1     Running   0          15m
+
+NAME                           TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)    AGE
+service/kubernetes             ClusterIP   10.96.0.1    <none>        443/TCP    42m
+service/version1-flaskapp-db   ClusterIP   None         <none>        3306/TCP   15m
+
+NAME                                    READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/version1-flaskapp-app   1/1     1            1           15m
+
+NAME                                               DESIRED   CURRENT   READY   AGE
+replicaset.apps/version1-flaskapp-app-76b58b85f4   1         1         1       15m
+
+NAME                                    READY   AGE
+statefulset.apps/version1-flaskapp-db   1/1     15m
+
+NAME                                                    REFERENCE                          TARGETS   MINPODS   MAXPODS   REPLICAS   AGE
+horizontalpodautoscaler.autoscaling/version1-flaskapp   Deployment/version1-flaskapp-app   2%/70%    1         2         1          15m
 ```
 
-After we have cleaned up any error we might have found, we can proceed to install the Helm chart with the command below:
+En la parte inferior de la salida anterior, podemos ver los datos relativos al autoescalado.
+
+También podemos ver el manifiesto de la version desplegada, ejecutando:
 
 ```bash
-helm install project flaskapp
+helm get manifest version1
 ```
-You will see the output.
+Por último, comprobamos la app:
+```bash
+curl http://foo.bar.com
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>2</td></tr></body></html>
+vagrant@tierra:/vagrant/practica-docker-k8s/k8s$ curl http://foo.bar.com
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>3</td></tr></body></html>
+vagrant@tierra:/vagrant/practica-docker-k8s/k8s$ curl http://foo.bar.com
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>4</td></tr></body></html>
+vagrant@tierra:/vagrant/practica-docker-k8s/k8s$ curl http://foo.bar.com
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>5</td></tr></body></html>
+```
 
-```bash
-NAME: project
-LAST DEPLOYED: Fri Mar 11 19:13:35 2022
-NAMESPACE: default
-STATUS: deployed
-REVISION: 1
-TEST SUITE: None
-```
-Now we have to verify all the manifests are running as expected.
 
-```bash
-kubectl get pod
-NAME                                    READY   STATUS    RESTARTS   AGE
-project-flaskapp-app-5788b4f85b-s68zt   1/1     Running   3          50s
-project-flaskapp-db-6744b7d55d-4rvbw    1/1     Running   0          50s
-```
-```bash
-kubectl get service
-NAME                   TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)          AGE
-chart-flaskapp-db      ClusterIP      None           <none>          3306/TCP         6h
-kubernetes             ClusterIP      10.80.0.1      <none>          443/TCP          22h
-project-flaskapp-app   LoadBalancer   10.80.15.217   35.195.175.88   3306:31510/TCP   71s
-project-flaskapp-db    ClusterIP      None           <none>          3306/TCP         71s
-```
-```bash
-kubectl get ingress
-NAME               CLASS    HOSTS         ADDRESS         PORTS   AGE
-project-flaskapp   <none>   foo.bar.com   35.241.175.40   80      92s
-```
-```bash
-kubectl get hpa
-NAME               REFERENCE                         TARGETS         MINPODS   MAXPODS   REPLICAS   AGE
-flask-ha           Deployment/flask-service          <unknown>/80%   1         10        0          20m
-project-flaskapp   Deployment/project-flaskapp-app   <unknown>/80%   1         10        1          3m42s
-````
-You can also get all the manifest through this command:
 
-```bash
-helm get manifest project
-```
-```bash
----
-# Source: flaskapp/templates/secret.yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: project-flaskapp-secret
-  namespace: default
-type: Opaque
-data:
-  rootpassword: "cGFzc3c="
-  userpassword: "c2VjcmV0MTIzNDU="
-  username: "dXN1YXJpb2Ri"
----
-# Source: flaskapp/templates/configmap.yaml
-apiVersion: v1
-data:
-  dbname: studentdb
-  host: project-flaskapp-db
-kind: ConfigMap
-metadata:
-  creationTimestamp: null
-  name: project-flaskapp-cm
-  namespace: default
----
-# Source: flaskapp/templates/mysql-pvc.yaml
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: project-flaskapp-mysql-pv-claim
-  namespace: default
-spec:
-  storageClassName: standard
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 20Gi
----
-```
-After deploying the helm chart, we apply a port-forward towards port 5000 to test the application:
-<ul>
-<li>http://localhost:5000/create-table </li>
-<li>http://localhost:5000/add-students </li>
-<li>http://localhost:5000/ </li>
-</ul>
-
-```bash
-kubectl port-forward svc/project-flaskapp-app 5000:5000
-Forwarding from 127.0.0.1:5000 -> 5000
-Forwarding from [::1]:5000 -> 5000
-Handling connection for 5000
-Handling connection for 5000
-```
-![app_localhost](https://user-images.githubusercontent.com/39458920/158238393-6d8eb13b-8803-455f-b234-25e4f1ed94ab.JPG)
-
-This is how my kubernetes cluster looks like once whole the manifests have been deployed:
-
-![kubernetes](https://user-images.githubusercontent.com/39458920/158015364-1068a695-d314-4f82-a266-6d2401bbb089.JPG)
-![services kubernetes](https://user-images.githubusercontent.com/39458920/158015370-5eb37562-fb24-4334-906f-e05712609339.JPG)
 
