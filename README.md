@@ -1,6 +1,4 @@
-# Contenedores-OscarMontes
-
- contenedores-kubernetes-OscarMontes
+# Contenedores-Oscar Montes
 
 <h1>DOCKERS</h1>
 
@@ -74,52 +72,42 @@ Para desplegar los contenedores, ejecutar:
  docker-compose up
  ```
 Ejecutando curl http://192.168.49.1:5000 repetidas veces, veremos que el contador aumenta.
- 
+
+ ```bash
 <html><body> VISITANTES: <table style='border:1px solid red'><tr><td>1</td></tr></body></html>
 <html><body> VISITANTES: <table style='border:1px solid red'><tr><td>2</td></tr></body></html>
 <html><body> VISITANTES: <table style='border:1px solid red'><tr><td>3</td></tr></body></html>
 <html><body> VISITANTES: <table style='border:1px solid red'><tr><td>4</td></tr></body></html>
 <html><body> VISITANTES: <table style='border:1px solid red'><tr><td>5</td></tr></body></html>
 <html><body> VISITANTES: <table style='border:1px solid red'><tr><td>6</td></tr></body></html>
-
+ ```
  
  
-<h1>Deploying the application in Kubernetess</h1>
-First of all you will need to create a cluster in Google Cloud console to associate it to Kubernetes environment.
+<h1>Despliegue en Kubernetes</h1>
 
-Creating namespace for each manifest.
+Instalamos Minikube 
 ```bash
-k create ns database --dry-run -oyaml > ns.yaml
-k create ns flask-api --dry-run -oyaml > ns-flask-api.yaml
-
-k create -f ns.yaml
-k create -f ns-flask-api.yaml
+curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+sudo install minikube-linux-amd64 /usr/local/bin/minikube
 ```
-<h1>Storing database credentials in Kubernetes secrets</h1> 
+
+Arrancamos el Cluster de Minikube 
+```bash
+minikube start
+```
+
+Para esta práctica, utilizaremos el Namespace por Defecto.
+
+<h1>Gestión de credenciales con Kubernetes secrets</h1> 
  
- The vulnerable data in the database should be stored as Base64 encoded strings thorugh the following command:
+ Para la generación de la clave cifrada, hemos seguido el siguiente procedimiento:
  ```bash
- echo -n 'rootpassword' | base64
+ echo -n 'elegir_contraseña' | base64
 ```
-
-This command will output a string of characters, as shown below.
-```bash
- c2VjcmV0MTIU=
-```
-Once the rootpassword is encoded, we deployeed a secret file for each namespace created.
+Copiando la salida de la misma en el fichero de contraseñas (secret.yaml en nuestro caso) a las cuentas que utilicemos; por ejemplo:
 
 ```bash
-apiVersion: v1
-kind: Secret
-metadata:
-  name: mysql-secret
-  namespace: database
-type: Opaque
-data:
-  rootpassword: cGFzc3c=
-```
-```bash
-k create -f mysql-secret.yaml
+ c2VjcmV0MTIzNDU=
 ```
 
 ```bash
@@ -130,420 +118,182 @@ metadata:
   namespace: flask-api
 type: Opaque
 data:
-  userpassword: c2VjcmV0MTIzNDU=
+  userpassword: c2VjcmV0MTIzNDU= <<<<<<<
   username: dXN1YXJpb2Ri
 ```
-```bash
-k create -f flaskapi-secrets.yaml
-```
-Now let's provide persistence to the database with Persistent Volume Claim. For this is needed to check the storage classes from the cluster.
 
-According to the output below, it seems to be standard:
-```bash
-kubectl get storageclasses.storage.k8s.io
-NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
-premium-rwo          pd.csi.storage.gke.io   Delete          WaitForFirstConsumer   true                   8d
-standard (default)   kubernetes.io/gce-pd    Delete          Immediate              true                   8d
-```
-Now we can define the manifest for Persistent Volume Claim:
+Para la utilización de variables con datos no sensibles, utilizaremos configmap:
 
 ```bash
 apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: mysql-pv-claim
-  namespace: database
-spec:
-  storageClassName: standard
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 20Gi
-```
-
-```bash
-k create -f mysql-pvc.yaml
-```
-As you can see Persistent Volume Claim has been successfully created and bound.
-
-```bash
-kubectl get pvc -n database
-NAME             STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
-mysql-pv-claim   Bound    pvc-618b86aa-310f-426a-8fd1-70d650c1bb42   20Gi       RWO            standard       10h
-```
-Additionally, we can see persistent volume is automatically created.
-
-```bash
-kubectl get persistentvolume
-NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                     STORAGECLASS   REASON   AGE
-pvc-618b86aa-310f-426a-8fd1-70d650c1bb42   20Gi       RWO            Delete           Bound    database/mysql-pv-claim   standard                11h
-```
-
-We created a configmap file for the database instance in order to make the environment variable (MYSQL_DATABASE) available in the MySQL deployment.
-
-```bash
-apiVersion: v1
-data:
-  dbname: studentdb
-  host: mysql
 kind: ConfigMap
+data:
+  MYSQL_USER: keepcoding
+  MYSQL_HOST: bbdd1
+  MYSQL_DATABASE: contador-db
+  FLASK_APP: app.py
+  FLASK_ENV: development
+  FLASK_RUN_HOST: 0.0.0.0
 metadata:
-  name: flaskapi-cm
-  namespace: database
+  name: flask-config
   ```
 
-<h1>Deploying MySQL in Kubernetess</h1>
-
-Now we can run the mysql instance with a deployment workload.
-
-```bash
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mysql
-  namespace: database
-spec:
-  selector:
-    matchLabels:
-      app: mysql
-  strategy:
-    type: Recreate
-  template:
-    metadata:
-      labels:
-        app: mysql
-    spec:
-      containers:
-      - image: mysql:5.6
-        name: mysql
-        env:
-        - name: MYSQL_ROOT_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: mysql-secret
-              key: rootpassword
-        - name: MYSQL_DATABASE
-          valueFrom:
-            configMapKeyRef:
-              name: flaskapi-cm
-              key: dbname
-        - name: MYSQL_USER
-          valueFrom:
-            secretKeyRef:
-              name: mysql-secret
-              key: username
-        - name: MYSQL_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: mysql-secret
-              key: userpassword
-        ports:
-        - containerPort: 3306
-          name: mysql
-        volumeMounts:
-        - name: mysql-persistent
-          mountPath: /var/lib/mysql
-      volumes:
-      - name: mysql-persistent
-        persistentVolumeClaim:
-          claimName: mysql-pv-claim
-  ```
-We can see the associated pod to mysql instance, which is in status running.
-
-```bash
-kubectl get pods -n database
-NAME                     READY   STATUS    RESTARTS   AGE
-mysql-54dccfbfbd-vslwh   1/1     Running   0          10h
-```
-Creating a service to provide MySQL access towards Flask app or any other pod inside the cluster.
+Para la ejecución de sentecias sql en la bbdd para generar los objetos necesarios para que funcione la app, utilizaremos otro configmap:
 
 ```bash
 apiVersion: v1
-kind: Service
-metadata:
-  name: mysql
-  namespace: database
-spec:
-  ports:
-  - port: 3306
-  selector:
-    app: mysql
-  clusterIP: None
-```
-
-```bash
-kubectl create -f service-mysql.yaml
-```
-
-<h1>Storing database credentials in Kubernetes Configmap</h1> 
-
-I have specified the variables MYSQL_HOST and MYSQL_DB into the configmap configuration.
-
-```bash
-apiVersion: v1
-data:
-  dbname: studentdb
-  host: mysql
 kind: ConfigMap
 metadata:
-  creationTimestamp: null
-  name: flaskapi-cm
-  namespace: flask-api
+  name: mysql-initdb-config
+data:
+  init.sql: |
+    USE contador-db;
+    CREATE TABLE tabla_contador (contador int NOT NULL);
+    INSERT INTO tabla_contador VALUES (0);
+  ```
+Crearemos un Servicio ClusterIp para conectar el pod de la app con el pod de la bbdd.
+
+Crearemos un Nodeport para conectar el Cluster con la app en uno de los pods, vía puerto 5000.
+
+Crearemos un ingress para conectar desde fuera, gracias a un proxy-inverso, vía puerto 80
+
+
+<h1>Despliegue</h1>
+
+Ejecutamos los siguientes comandos:
+
+```bash
+# Despliegue ClusterIP
+  kubectl apply -f cluster_ip_bbdd.yaml
+# Despliegue NodePort
+  kubectl apply -f nodeport_app.yaml
+# Despliegue Secrets
+  kubectl apply -f secrets.yaml
+# Despliegue Ingress
+  kubectl apply -f ingress.yaml
+# Despliegue ConfigMap con comandos de BBDD
+  kubectl apply -f bbdd-cm.yaml
+# Despliegue ConfigMap con variables no sensibles
+  kubectl apply -f flask-cm.yaml
+# Despliegue de la APP  
+  kubectl apply -f deploy_bbdd.yaml
+# Despliegue de la BBDD
+  kubectl apply -f deploy_app.yaml
+```
+
+Chequeamos los recursos desplegados:
+
+```bash
+#kubectl get all
+
+NAME                                        READY   STATUS    RESTARTS   AGE
+pod/app-mysql-0                             1/1     Running   0          53m
+pod/flask-app-deployment-6ccc544684-sm2m5   1/1     Running   0          53m
+
+NAME                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+service/app1         NodePort    10.97.62.85      <none>        5000:30082/TCP   53m
+service/bbdd1        ClusterIP   10.108.135.154   <none>        3306/TCP         53m
+service/kubernetes   ClusterIP   10.96.0.1        <none>        443/TCP          54m
+
+NAME                                   READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/flask-app-deployment   1/1     1            1           53m
+
+NAME                                              DESIRED   CURRENT   READY   AGE
+replicaset.apps/flask-app-deployment-6ccc544684   1         1         1       53m
+
+NAME                         READY   AGE
+statefulset.apps/app-mysql   1/1     53m
 ```
 
 ```bash
-k create -f configmap.yaml
-```
-
-<h1>Deploying Flask app in Kubernetess</h1>
-Now I set the environment variales in this deployment, using the values specified in the secret and configmap file.
-The flask image was built from Dockerfile configuration.
-
-```bash
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: flaskapp-deployment
-  namespace: flask-api
-  labels:
-    app: flaskapp
-spec:
-  selector:
-    matchLabels:
-      app: flaskapp
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        app: flaskapp
-    spec:
-      containers:
-        - name: flaskapp
-          image: ramirezy/flask-app
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 5000
-          env:
-            - name: MYSQL_HOST
-              valueFrom:
-                configMapKeyRef:
-                  name: flaskapi-cm
-                  key: host
-            - name: MYSQL_DB
-              valueFrom:
-                configMapKeyRef:
-                  name: flaskapi-cm
-                  key: dbname
-            - name: MYSQL_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: mysql-secret
-                  key: userpassword
-            - name: MYSQL_USER
-              valueFrom:
-                secretKeyRef:
-                  name: mysql-secret
-                  key: username
-```
-Applying the flask app deployment
-
-```bash
-kubectl create -f flaskapp-deployment.yaml
+#Kubectl get ingress my-flask (en el que vemos el campo ADDRESS vacío)
+NAME       CLASS    HOSTS         ADDRESS   PORTS   AGE
+my-flask   <none>   foo.bar.com             80      55m
 ```
 ```bash
-kubectl get pods -n flask-api
-NAME                                   READY   STATUS    RESTARTS   AGE
-flaskapp-deployment-7bd7ccf9b6-h254l   1/1     Running   0          151m
-```
-Creating a service to expose the deployment ousite of the cluster through a LoadBalancer.
-
-```bash
-apiVersion: v1
-kind: Service
-metadata:
-  name: flask-service
-  namespace: flask-api
-  labels:
-    app: flaskapp
-spec:
-  ports:
-  - port: 5000
-    protocol: TCP
-    targetPort: 5000
-  selector:
-    app: flaskapp
-  type: LoadBalancer
-```
-```bash
-kubectl create -f service-flask.yaml
-```
-Now we can check all the resources deployed in each instance.
-
-Database instance
-```bash
-kubectl get all -n database
-NAME                         READY   STATUS    RESTARTS   AGE
-pod/mysql-54dccfbfbd-vslwh   1/1     Running   0          11h
-
-NAME            TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)    AGE
-service/mysql   ClusterIP   None         <none>        3306/TCP   5h34m
-
-NAME                    READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/mysql   1/1     1            1           11h
-
-NAME                               DESIRED   CURRENT   READY   AGE
-replicaset.apps/mysql-54dccfbfbd   1         1         1       11h
+#kubectl get configmap
+NAME                  DATA   AGE
+flask-config          6      55m
+kube-root-ca.crt      1      55m
+mysql-initdb-config   1      55m
 ```
 
-Flask instance
 ```bash
-kubectl get all -n flask-api
-NAME                                       READY   STATUS    RESTARTS   AGE
-pod/flaskapp-deployment-5fcb4ddbcf-qxj5x   1/1     Running   0          67m
-
-NAME                    TYPE           CLUSTER-IP     EXTERNAL-IP    PORT(S)          AGE
-service/flask-service   LoadBalancer   10.80.11.168   35.240.60.60   5000:30209/TCP   67m
-
-NAME                                  READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/flaskapp-deployment   1/1     1            1           67m
-
-NAME                                             DESIRED   CURRENT   READY   AGE
-replicaset.apps/flaskapp-deployment-5fcb4ddbcf   1         1         1       67m
+#NAME            TYPE     DATA   AGE
+secret-manual   Opaque   2      57m
 ```
 
-<h1>Creating an Ingress Resource</h1>
-You will need to install the ingress controller as per the info here <a href="https://kubernetes.github.io/ingress-nginx/deploy/">here </a>
+<h1>Instalamos el Ingress Controller</h1>
+Procedimiento en el <a href="https://kubernetes.github.io/ingress-nginx/deploy/">enlace </a>
 
-Now you can check the pods and resources generated by the ingress controller:
+Chequeamos los recursos generados:
 
 ```bash
-kubectl get all --namespace=ingress-nginx
-NAME                                            READY   STATUS      RESTARTS   AGE
-pod/ingress-nginx-admission-create-wnmd2        0/1     Completed   0          4d1h
-pod/ingress-nginx-admission-patch-5kx9m         0/1     Completed   0          4d1h
-pod/ingress-nginx-controller-54d8b558d4-9xwjl   1/1     Running     0          4d1h
+NAME                                           READY   STATUS      RESTARTS   AGE
+pod/ingress-nginx-admission-create-q9lvn       0/1     Completed   0          89m
+pod/ingress-nginx-admission-patch-mnb2m        0/1     Completed   1          89m
+pod/ingress-nginx-controller-77669ff58-hg8zt   1/1     Running     0          27m
 
-NAME                                         TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)                      AGE
-service/ingress-nginx-controller             LoadBalancer   10.80.9.203    35.241.175.40   80:30588/TCP,443:30823/TCP   4d1h
-service/ingress-nginx-controller-admission   ClusterIP      10.80.14.114   <none>          443/TCP                      4d1h
+NAME                                         TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                      AGE
+service/ingress-nginx-controller             NodePort    10.100.106.113   <none>        80:30178/TCP,443:30452/TCP   89m
+service/ingress-nginx-controller-admission   ClusterIP   10.100.83.176    <none>        443/TCP                      89m
 
 NAME                                       READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/ingress-nginx-controller   1/1     1            1           4d1h
+deployment.apps/ingress-nginx-controller   1/1     1            1           89m
 
 NAME                                                  DESIRED   CURRENT   READY   AGE
-replicaset.apps/ingress-nginx-controller-54d8b558d4   1         1         1       4d1h
+replicaset.apps/ingress-nginx-controller-5d44985b66   0         0         0       89m
+replicaset.apps/ingress-nginx-controller-77669ff58    1         1         1       27m
+
+NAME                                       COMPLETIONS   DURATION   AGE
+job.batch/ingress-nginx-admission-create   1/1           26s        89m
+job.batch/ingress-nginx-admission-patch    1/1           27s        89m
+
 
 ```
 
-I create an ingress resource with anotation <b>kubernetes.io/ingress.class: nginx</b> to access Flask service 
+Habilitamos los Ingress Addons
 
 ```bash
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: flask-ingress
-  namespace: flask-api
-  annotations:
-    kubernetes.io/ingress.class: nginx
-spec:
-  rules:
-  - host: foo.bar.com
-    http:
-      paths:
-      - path: '/'
-        pathType: Prefix
-        backend:
-          service:
-            name: flask-service
-            port:
-              number: 5000
+# minikube addons enable ingress
+ingress was successfully enabled
 ```
-Checking ingress
+Chequeamos Ingress
 
 ```bash
-k get ingress -n flask-api
-NAME            CLASS    HOSTS         ADDRESS         PORTS   AGE
-flask-ingress   <none>   foo.bar.com   35.241.175.40   80      56m
+# kubectl get ingress (campo ADDRESS completado)
+NAME       CLASS    HOSTS         ADDRESS        PORTS   AGE
+my-flask   <none>   foo.bar.com   192.168.49.2   80      22m
+
 ```
-We can check the nginx access through this IP address 32.241.175.40
-
-![nginx_access](https://user-images.githubusercontent.com/39458920/158379292-bb9a0301-29d7-47e1-a472-fd1ecd383440.JPG)
-
-
-As per the log below, we can see the ingress controller is enabled
+Tras meter la entrada "192.168.49.2 foo.bar.com" en el fichero /etc/hosts, probamos la conectividad con la App:
 
 ```bash
-kubectl describe svc -n flask-api
-Name:                     flask-service
-Namespace:                flask-api
-Labels:                   app=flaskapp
-Annotations:              cloud.google.com/neg: {"ingress":true}
-Selector:                 app=flaskapp
-Type:                     LoadBalancer
-IP Family Policy:         SingleStack
-IP Families:              IPv4
-IP:                       10.80.1.183
-IPs:                      10.80.1.183
-LoadBalancer Ingress:     35.205.88.13
-Port:                     <unset>  5000/TCP
-TargetPort:               5000/TCP
-NodePort:                 <unset>  31506/TCP
-Endpoints:                10.76.0.17:5000
-Session Affinity:         None
-External Traffic Policy:  Cluster
-Events:                   <none>
-
+vagrant@tierra:/vagrant/practica-docker-k8s/k8s$ curl http://foo.bar.com
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>5</td></tr></body></html>
+vagrant@tierra:/vagrant/practica-docker-k8s/k8s$ curl http://foo.bar.com
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>6</td></tr></body></html>
+vagrant@tierra:/vagrant/practica-docker-k8s/k8s$ curl http://foo.bar.com
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>7</td></tr></body></html>
+vagrant@tierra:/vagrant/practica-docker-k8s/k8s$ curl http://foo.bar.com
+<html><body> VISITANTES: <table style='border:1px solid red'><tr><td>8</td></tr></body></html>
 ```
 
-<h1>Horizontal Autoscaling</h1>
-We have implemented the following autoscaling for the application Pod in case it needs more load, then HPA will increase more pods automatically.
-
-```bash
-apiVersion: autoscaling/v1
-kind: HorizontalPodAutoscaler
-metadata:
-  name: flask-ha
-  namespace: flask-api
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: flask-service
-  minReplicas: 1
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
-```
 
 <h1>Helm Charts</h1>
-Once we have the application deployed in Kubernetes, now we are going to package the code with Helm Charts.
 
-You may need to install it before to proceed, for more info you can check this <a href="https://helm.sh/docs/intro/install/">Quickstart guide </a>
-The working direcory of Helm chart
+En este apartado, obviaré la descripción de los ficheros y buena parte de los chequeos a realizar, ya que todo esto ya aparece en el apartado anterior.
 
-```bash
-└── flaskapp
-    ├── charts
-    ├── Chart.yaml
-    ├── templates
-    │   ├── configmap.yaml
-    │   ├── flaskapp-deployment.yaml
-    │   ├── _helpers.tpl
-    │   ├── hpa.yaml
-    │   ├── ingress.yaml
-    │   ├── mysql-deployment.yaml
-    │   ├── mysql-pvc.yaml
-    │   ├── secret.yaml
-    │   ├── service-flask.yaml
-    │   ├── service-mysql.yaml
-    │   └── tests
-    └── values.yaml
-```
-
-First of all, you would need to create the project name, where will be deployed the helm configuration:
+Desde el directorio helm, desplegamos del siguiente modo:
 
 ```bash
-helm create flaskapp
+elm install version1 flaskapp
+NAME: version1
+LAST DEPLOYED: Thu Feb 23 15:48:39 2023
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
 ```
 
 To build the Heml we are going to package these files:
