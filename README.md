@@ -284,6 +284,8 @@ vagrant@tierra:/vagrant/practica-docker-k8s/k8s$ curl http://foo.bar.com
 
 En este apartado, obviaré la descripción de los ficheros y los chequeos a realizar ya descritos en el apartado anterior.
 
+Como novedad en este apartado, está el fichero hpa.yaml, en el se define el autoescalado.
+
 En el fichero de configuración, values.yaml, tendremos las variables (entre las que se encuentran las del autoescalado):
 
 ```bash# Ingress
